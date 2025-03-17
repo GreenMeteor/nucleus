@@ -51,11 +51,13 @@ class ModuleInstallerService
                 return ['success' => false, 'message' => 'No module found in package.'];
             }
 
-            $moduleId = $this->getModuleId($directories[0]);
-            if (!$moduleId) {
+            $moduleInfo = $this->getModuleInfo($directories[0]);
+            if (!$moduleInfo || !$moduleInfo['id']) {
                 return ['success' => false, 'message' => 'Could not determine module ID.'];
             }
 
+            $moduleId = $moduleInfo['id'];
+            $moduleNamespace = $moduleInfo['namespace'] ?? "humhub\\modules\\{$moduleId}";
             $moduleTargetPath = "{$this->modulesPath}/{$moduleId}";
             $backupPath = null;
 
@@ -66,15 +68,32 @@ class ModuleInstallerService
 
             FileHelper::copyDirectory($directories[0], $moduleTargetPath);
 
-            $migrationResult = $this->runMigrations($moduleId);
+            $migrationResult = $this->runMigrations($moduleId, $moduleNamespace);
 
             FileHelper::removeDirectory($downloadPath);
 
             if ($backupPath !== null) {
-                FileHelper::removeDirectory($backupPath);
+                if ($migrationResult['success']) {
+                    FileHelper::removeDirectory($backupPath);
+                } else {
+                    FileHelper::removeDirectory($moduleTargetPath);
+                    rename($backupPath, $moduleTargetPath);
+                }
             }
 
-            return ['success' => true, 'message' => "Module {$moduleId} installed." . ($migrationResult ? ' Migrations applied.' : ''), 'moduleId' => $moduleId];
+            if (!$migrationResult['success']) {
+                return [
+                    'success' => false, 
+                    'message' => "Module {$moduleId} files installed but migrations failed: {$migrationResult['message']}"
+                ];
+            }
+
+            return [
+                'success' => true, 
+                'message' => "Module {$moduleId} installed successfully." . 
+                             ($migrationResult['migrationsApplied'] > 0 ? " {$migrationResult['migrationsApplied']} migrations applied." : " No migrations needed."), 
+                'moduleId' => $moduleId
+            ];
         } catch (\Exception $e) {
             Yii::error('Error installing module: ' . $e->getMessage(), 'nucleus');
             return ['success' => false, 'message' => 'Installation error: ' . $e->getMessage()];
@@ -128,10 +147,14 @@ class ModuleInstallerService
 
         $success = curl_exec($ch);
 
+        if (!$success) {
+            Yii::error('Download failed: ' . curl_error($ch), 'nucleus');
+        }
+
         curl_close($ch);
         fclose($fp);
 
-        return $success;
+        return $success && file_exists($savePath) && filesize($savePath) > 0;
     }
 
     private function extractZip(string $zipFile, string $extractPath): bool
@@ -142,58 +165,131 @@ class ModuleInstallerService
             $zip->close();
             return $success;
         }
+        Yii::error('Failed to open zip file: ' . $zipFile, 'nucleus');
         return false;
     }
 
     /**
-     * Determines the module ID from the module source path
+     * Gets module info including ID and namespace from the module source path
      * 
      * @param string $modulePath The path to the module
-     * @return string|null The module ID or null if not found
+     * @return array|null Module information or null if not found
      */
-    private function getModuleId($modulePath)
+    private function getModuleInfo($modulePath)
     {
-        $moduleFiles = glob($modulePath . '/Module.php');
+        $moduleFiles = array_merge(
+            glob($modulePath . '/Module.php'),
+            glob($modulePath . '/module/Module.php')
+        );
 
-        if (!empty($moduleFiles)) {
-            $content = file_get_contents($moduleFiles[0]);
+        foreach ($moduleFiles as $moduleFile) {
+            $content = file_get_contents($moduleFile);
+            $namespace = null;
+            $moduleId = null;
 
             if (preg_match('/namespace\s+([^;]+)/i', $content, $matches)) {
                 $namespace = $matches[1];
-
                 $parts = explode('\\', $namespace);
 
                 $moduleIndex = array_search('modules', $parts);
-
                 if ($moduleIndex !== false && isset($parts[$moduleIndex + 1])) {
-                    return $parts[$moduleIndex + 1];
+                    $moduleId = $parts[$moduleIndex + 1];
                 }
+            }
+
+            if (!$moduleId && preg_match('/(?:const|public|protected|private|static)\s+(?:\$)?(?:MODULE_)?ID\s*=\s*[\'"]([^\'"]+)[\'"];?/i', $content, $matches)) {
+                $moduleId = $matches[1];
+            }
+
+            if ($moduleId) {
+                return [
+                    'id' => $moduleId,
+                    'namespace' => $namespace,
+                    'path' => dirname($moduleFile)
+                ];
             }
         }
 
-        return basename($modulePath);
+        return [
+            'id' => basename($modulePath),
+            'namespace' => null
+        ];
     }
 
-    private function runMigrations(string $moduleId): bool
+    /**
+     * Runs migrations for a module
+     * 
+     * @param string $moduleId The module ID
+     * @param string|null $moduleNamespace The module namespace if known
+     * @return array Result of migration attempt with detailed information
+     */
+    private function runMigrations(string $moduleId, ?string $moduleNamespace = null): array
     {
         try {
-            $migrationPath = "{$this->modulesPath}/{$moduleId}/migrations";
-            if (!is_dir($migrationPath) || !$this->migrationService->hasMigrations($migrationPath)) {
-                return false;
+            $moduleTargetPath = "{$this->modulesPath}/{$moduleId}";
+
+            $possibleMigrationPaths = [
+                "{$moduleTargetPath}/migrations",
+                "{$moduleTargetPath}/module/migrations",
+                "{$moduleTargetPath}/Migration"
+            ];
+
+            $migrationPath = null;
+            foreach ($possibleMigrationPaths as $path) {
+                if (is_dir($path)) {
+                    $migrationPath = $path;
+                    break;
+                }
             }
 
-            $migrationNamespace = "humhub\\modules\\{$moduleId}\\migrations";
-            $pendingMigrations = $this->migrationService->getPendingMigrations($migrationNamespace);
-
-            if (empty($pendingMigrations)) {
-                Yii::info("No pending migrations for module: {$moduleId}", 'nucleus');
-                return false;
+            if (!$migrationPath) {
+                return ['success' => true, 'migrationsApplied' => 0, 'message' => 'No migrations directory found'];
             }
 
-            return $this->migrationService->migrateUp($migrationNamespace) > 0;
+            $migrationNamespaces = [];
+
+            if ($moduleNamespace) {
+                $migrationNamespaces[] = $moduleNamespace . "\\migrations";
+                $migrationNamespaces[] = $moduleNamespace . "\\Migration";
+            }
+
+            $migrationNamespaces[] = "humhub\\modules\\{$moduleId}\\migrations";
+            $migrationNamespaces[] = "humhub\\modules\\{$moduleId}\\Migration";
+
+            $pendingMigrations = [];
+            $usedNamespace = null;
+
+            foreach ($migrationNamespaces as $namespace) {
+
+                try {
+                    $migrations = $this->migrationService->getPendingMigrations($namespace);
+                    if (!empty($migrations)) {
+                        $pendingMigrations = $migrations;
+                        $usedNamespace = $namespace;
+                        break;
+                    }
+                } catch (\Exception $e) {
+                    Yii::error("Error checking namespace {$namespace}: " . $e->getMessage(), 'nucleus');
+                }
+            }
+
+            if (empty($pendingMigrations) || !$usedNamespace) {
+                return ['success' => true, 'migrationsApplied' => 0, 'message' => 'No pending migrations'];
+            }
+
+            $migrationsApplied = $this->migrationService->migrateUp($usedNamespace);
+
+            if ($migrationsApplied === false) {
+                Yii::error("Migration failed for module: {$moduleId}", 'nucleus');
+                return ['success' => false, 'migrationsApplied' => 0, 'message' => 'Migration execution failed'];
+            }
+
+            return ['success' => true, 'migrationsApplied' => $migrationsApplied, 'message' => 'Migrations applied successfully'];
+
         } catch (\Exception $e) {
-            Yii::error('Migration error: ' . $e->getMessage(), 'nucleus');
-            return false;
+            $errorMessage = 'Migration error: ' . $e->getMessage();
+            Yii::error($errorMessage, 'nucleus');
+            return ['success' => false, 'migrationsApplied' => 0, 'message' => $errorMessage];
         }
     }
 }
