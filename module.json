@@ -9,6 +9,7 @@
     "keywords": ["nucleus"],
     "homepage": "https://greenmeteor.net/",
     "issues": "https://github.com/GreenMeteor/nucleus/issues",
+    "screenshots": ["resources/Screenshot_1.png", "resources/Screenshot_2.png"],
     "authors": [
         {
             "name": "Green Meteor",
