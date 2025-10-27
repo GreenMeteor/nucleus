@@ -1,10 +1,10 @@
 {
     "id": "nucleus",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "name": "Nucleus",
     "description": "Install custom Core Modules to your HumHub instance.",
     "humhub": {
-        "minVersion": "1.16.0"
+        "minVersion": "1.18.0-beta.4"
     },
     "keywords": ["nucleus"],
     "homepage": "https://greenmeteor.net/",
@@ -19,3 +19,4 @@
         }
     ]
 }
+
