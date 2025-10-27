@@ -1,9 +1,8 @@
 <?php
 
 use yii\helpers\Url;
-use humhub\libs\Html;
-use humhub\libs\Helpers;
-use yii\widgets\ActiveForm;
+use humhub\helpers\Html;
+use humhub\widgets\form\ActiveForm;
 
 /**
  * @var $this yii\web\View
@@ -12,7 +11,7 @@ use yii\widgets\ActiveForm;
 
 ?>
 
-<div class="panel panel-default">
+<div class="panel">
     <div class="panel-heading">
         <?= Yii::t('NucleusModule.base', '<strong>Nucleus</strong> Settings'); ?>
     </div>
@@ -29,7 +28,7 @@ use yii\widgets\ActiveForm;
 
         <?php $form = ActiveForm::begin(['id' => 'install-module-form']); ?>
 
-        <div class="form-group">
+        <div class="mb-3">
             <?= $form->field($model, 'githubUrl')->textInput([
                 'placeholder' => 'https://github.com/username/repository',
                 'class' => 'form-control',
@@ -37,24 +36,23 @@ use yii\widgets\ActiveForm;
             ])->hint(Yii::t('NucleusModule.base', 'Enter the GitHub repository URL of the module you want to install.')); ?>
             
             <div class="dropdown" style="margin-top: 10px;">
-                <button class="btn btn-default dropdown-toggle" type="button" id="coreModulesDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+                <button class="btn btn-secondary dropdown-toggle" type="button" id="coreModulesDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                     <?= Yii::t('NucleusModule.base', 'Select HumHub Core Module'); ?>
-                    <span class="caret"></span>
                 </button>
                 <ul class="dropdown-menu" id="core-modules-list" aria-labelledby="coreModulesDropdown">
-                    <li class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Loading modules...'); ?></li>
+                    <li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Loading modules...'); ?></h6></li>
                 </ul>
             </div>
         </div>
 
-        <div class="form-group">
+        <div class="mb-3">
             <?= $form->field($model, 'branch')->textInput([
                 'placeholder' => 'master',
                 'class' => 'form-control'
             ])->hint(Yii::t('NucleusModule.base', 'Enter the branch name to download (defaults to master).')); ?>
         </div>
 
-        <div class="form-group">
+        <div class="mb-3">
             <?= Html::submitButton(Yii::t('NucleusModule.base', 'Install'), ['class' => 'btn btn-primary', 'data-ui-loader' => '']); ?>
         </div>
 
@@ -62,7 +60,7 @@ use yii\widgets\ActiveForm;
     </div>
 </div>
 
-<div class="panel panel-default">
+<div class="panel">
     <div class="panel-heading">
         <?= Yii::t('NucleusModule.base', 'Instructions'); ?>
     </div>
@@ -93,7 +91,7 @@ $(document).ready(function() {
     // Fetch repositories with humhub-core topic from GitHub API
     function fetchCoreModules() {
         // Show loading indicator
-        $('#core-modules-list').html('<li class="dropdown-header">Loading modules...</li>');
+        $('#core-modules-list').html('<li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Loading modules...'); ?></h6></li>');
         
         $.ajax({
             url: 'https://api.github.com/search/repositories',
@@ -110,16 +108,16 @@ $(document).ready(function() {
                 if (modules.length > 0) {
                     // Add each module to the dropdown
                     $.each(modules, function(i, module) {
-                        modulesList += '<li><a href="#" class="module-select" data-url="' + module.html_url + '">' + 
-                                       module.name + ' <small class="text-muted">(' + module.stargazers_count + ' ★)</small></a></li>';
+                        modulesList += '<li><a class="dropdown-item module-select" href="#" data-url="' + module.html_url + '">' + 
+                                       module.name + ' <small class="text-body-secondary">(' + module.stargazers_count + ' ★)</small></a></li>';
                     });
                     
-                    modulesList += '<li role="separator" class="divider"></li>';
-                    modulesList += '<li><a href="https://github.com/topics/humhub-core" target="_blank">' + 
+                    modulesList += '<li><hr class="dropdown-divider"></li>';
+                    modulesList += '<li><a class="dropdown-item" href="https://github.com/topics/humhub-core" target="_blank">' + 
                                    '<?= Yii::t('NucleusModule.base', 'View all HumHub core modules'); ?></a></li>';
                 } else {
-                    modulesList = '<li class="dropdown-header"><?= Yii::t('NucleusModule.base', 'No modules found'); ?></li>';
-                    modulesList += '<li><a href="https://github.com/topics/humhub-core" target="_blank">' + 
+                    modulesList = '<li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'No modules found'); ?></h6></li>';
+                    modulesList += '<li><a class="dropdown-item" href="https://github.com/topics/humhub-core" target="_blank">' + 
                                   '<?= Yii::t('NucleusModule.base', 'Browse HumHub core modules'); ?></a></li>';
                 }
                 
@@ -135,8 +133,8 @@ $(document).ready(function() {
             },
             error: function() {
                 // Handle error
-                var errorMsg = '<li class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Failed to load modules'); ?></li>';
-                errorMsg += '<li><a href="https://github.com/topics/humhub-core" target="_blank">' + 
+                var errorMsg = '<li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Failed to load modules'); ?></h6></li>';
+                errorMsg += '<li><a class="dropdown-item" href="https://github.com/topics/humhub-core" target="_blank">' + 
                            '<?= Yii::t('NucleusModule.base', 'Browse HumHub core modules'); ?></a></li>';
                 
                 $('#core-modules-list').html(errorMsg);
@@ -160,13 +158,12 @@ $(document).ready(function() {
         if ($('#branch-dropdown-container').length === 0) {
             $branchField.after(
                 '<div id="branch-dropdown-container" class="dropdown" style="margin-top: 10px;">' +
-                '<button class="btn btn-default dropdown-toggle" type="button" id="branchesDropdown" ' +
-                'data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">' +
+                '<button class="btn btn-secondary dropdown-toggle" type="button" id="branchesDropdown" ' +
+                'data-bs-toggle="dropdown" aria-expanded="false">' +
                 '<?= Yii::t('NucleusModule.base', 'Select Branch'); ?>' +
-                '<span class="caret"></span>' +
                 '</button>' +
                 '<ul class="dropdown-menu" id="branches-list" aria-labelledby="branchesDropdown">' +
-                '<li class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Loading branches...'); ?></li>' +
+                '<li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Loading branches...'); ?></h6></li>' +
                 '</ul>' +
                 '</div>'
             );
@@ -181,16 +178,16 @@ $(document).ready(function() {
                 if (branches.length > 0) {
                     // Add each branch to the dropdown
                     $.each(branches, function(i, branch) {
-                        branchesList += '<li><a href="#" class="branch-select" data-branch="' + 
+                        branchesList += '<li><a class="dropdown-item branch-select" href="#" data-branch="' + 
                                        branch.name + '">' + branch.name + '</a></li>';
                     });
                     
                     // Add link to view all branches on GitHub
-                    branchesList += '<li role="separator" class="divider"></li>';
-                    branchesList += '<li><a href="' + repoUrl + '/branches" target="_blank">' + 
+                    branchesList += '<li><hr class="dropdown-divider"></li>';
+                    branchesList += '<li><a class="dropdown-item" href="' + repoUrl + '/branches" target="_blank">' + 
                                    '<?= Yii::t('NucleusModule.base', 'View all branches on GitHub'); ?></a></li>';
                 } else {
-                    branchesList = '<li class="dropdown-header"><?= Yii::t('NucleusModule.base', 'No branches found'); ?></li>';
+                    branchesList = '<li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'No branches found'); ?></h6></li>';
                 }
                 
                 // Update dropdown content
@@ -208,7 +205,7 @@ $(document).ready(function() {
             },
             error: function() {
                 // Handle error
-                var errorMsg = '<li class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Failed to load branches'); ?></li>';
+                var errorMsg = '<li><h6 class="dropdown-header"><?= Yii::t('NucleusModule.base', 'Failed to load branches'); ?></h6></li>';
                 $('#branches-list').html(errorMsg);
                 
                 // Reset placeholder
